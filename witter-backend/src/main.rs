@@ -1,11 +1,13 @@
 use dotenv::dotenv;
+use serde_json::json;
 use sqlx::pool::Pool;
 use sqlx::query;
 use sqlx::PgPool;
-use tide;
+use tide::Request;
+use tide::Server;
 
 #[async_std::main]
-async fn main() -> Result<(), CustomError> {
+async fn main() {
     dotenv().ok();
     pretty_env_logger::init();
 
@@ -14,19 +16,43 @@ async fn main() -> Result<(), CustomError> {
 
     let db_pool: PgPool = Pool::connect(&db_url).await.unwrap();
 
+    /*
     let rows = query!("select (1) as id, 'Herp Derpinson' as name")
         .fetch_one(&db_pool)
-        .await?;
-
+        .await
+        .unwrap();
     dbg!(rows);
+     */
 
-    let mut app = tide::new();
-    app.at("/").get(|_| async move { Ok("Hello, World!") });
-    app.listen("127.0.0.1:8080").await?;
+    let mut app: Server<ServerState> = Server::with_state(ServerState { db_pool });
+    app.at("/").get(|req: Request<ServerState>| async move {
+        // app.at("/").get(|_| async move {
+        // /*
+        let db_pool = &req.state().db_pool;
 
-    Ok(())
+        let rows = query!("select (1) as id, 'Herp Derpinson' as name")
+            .fetch_one(db_pool)
+            .await
+            .unwrap();
+
+        // dbg!(&rows);
+
+        let my_json = json!([rows.id.unwrap(), rows.name.unwrap()]);
+        Ok(my_json)
+
+        // let my_json = json!(rows);
+
+        // Ok("Hello, World!")
+    });
+    app.listen("127.0.0.1:8080").await.unwrap();
 }
 
+#[derive(Debug, Clone)]
+struct ServerState {
+    db_pool: PgPool,
+}
+
+/*
 #[derive(thiserror::Error, Debug)]
 enum CustomError {
     #[error(transparent)]
@@ -36,3 +62,4 @@ enum CustomError {
     #[error(transparent)]
     VarError(#[from] std::env::VarError),
 }
+*/
