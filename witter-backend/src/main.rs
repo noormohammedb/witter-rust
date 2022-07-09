@@ -1,5 +1,5 @@
 use dotenv::dotenv;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::pool::Pool;
 use sqlx::PgPool;
@@ -8,9 +8,11 @@ use tide::Request;
 use tide::Server;
 use uuid::Uuid;
 
-// use http_types::Body;
-// use tide::http::StatusCode;
-// use tide::Response;
+use tide::http::StatusCode;
+use tide::Response;
+
+/* */
+use http_types::Body;
 
 #[cfg(test)]
 mod tests;
@@ -65,7 +67,7 @@ async fn my_server() -> Server<ServerState> {
         .get(|req: Request<ServerState>| async move {
             let db_pool = &req.state().db_pool;
 
-            let rows = query_as!(User, "select id, username from users")
+            let rows = query_as!(User, "select id, username, password from users")
                 .fetch_all(db_pool)
                 .await
                 .unwrap();
@@ -74,6 +76,26 @@ async fn my_server() -> Server<ServerState> {
 
             // Ok(Response::new(StatusCode::Ok).set_body(Body::from_json(&user_list_json)?))
             Ok(user_list_json)
+        })
+        .post(|mut req: Request<ServerState>| async move {
+            let data_body = req.body_json::<CreateUser>().await.unwrap();
+            // dbg!(data_body);
+            let db_pool = &req.state().db_pool;
+
+            query!(
+                r#"
+                    insert into users (id, username, password)
+                    values ($1, $2, $3)
+                "#,
+                Uuid::new_v4(),
+                data_body.username,
+                data_body.password
+            )
+            .execute(db_pool)
+            .await
+            .unwrap();
+
+            Ok(Response::new(StatusCode::Created))
         });
 
     app
@@ -88,6 +110,13 @@ struct ServerState {
 struct User {
     id: Uuid,
     username: String,
+    password: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateUser {
+    username: String,
+    password: String,
 }
 
 /*
