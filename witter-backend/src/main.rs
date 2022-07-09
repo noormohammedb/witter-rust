@@ -1,10 +1,16 @@
 use dotenv::dotenv;
+use serde::Serialize;
 use serde_json::json;
 use sqlx::pool::Pool;
-use sqlx::query;
 use sqlx::PgPool;
+use sqlx::{query, query_as};
 use tide::Request;
 use tide::Server;
+use uuid::Uuid;
+
+// use http_types::Body;
+// use tide::http::StatusCode;
+// use tide::Response;
 
 #[cfg(test)]
 mod tests;
@@ -16,42 +22,59 @@ async fn main() {
     app.listen("127.0.0.1:8080").await.unwrap();
 }
 
+// #[cfg(not(test))]
+async fn make_db_poo() -> PgPool {
+    let db_url = std::env::var("DATABASE_URL").unwrap();
+    Pool::connect(&db_url).await.unwrap()
+}
+
 async fn my_server() -> Server<ServerState> {
     dotenv().ok();
     pretty_env_logger::init();
-    // dbg!(db_url);
-    let db_url = std::env::var("DATABASE_URL").unwrap();
 
-    let db_pool: PgPool = Pool::connect(&db_url).await.unwrap();
-
+    let db_pool = make_db_poo().await;
     let mut app: Server<ServerState> = Server::with_state(ServerState { db_pool });
-    /*
-    let rows = query!("select (1) as id, 'Herp Derpinson' as name")
-        .fetch_one(&db_pool)
-        .await
-        .unwrap();
-    dbg!(rows);
-     */
 
     app.at("/").get(|req: Request<ServerState>| async move {
-        // app.at("/").get(|_| async move {
-        // /*
         let db_pool = &req.state().db_pool;
 
-        let rows = query!("select (1) as id, 'Herp Derpinson' as name")
+        let rows = query!("select count(*) from users")
             .fetch_one(db_pool)
             .await
             .unwrap();
 
-        // dbg!(&rows);
+        dbg!(&rows);
 
-        let my_json = json!([rows.id.unwrap(), rows.name.unwrap()]);
+        // let my_json = json!([rows.id.unwrap(), rows.name.unwrap()]);
+        // Ok(Response::new(StatusCode::Ok).set_body(Body::from_json(&my_json)))
+
+        let my_json = json!(["foo", "bar"]);
+
+        // Ok(Response::new(StatusCode::Ok).set_body(Body::from_json(&my_json)))
         Ok(my_json)
+
+        // Ok(Response::new(StatusCode::Ok).bod)
+        // Ok(Response::new(StatusCode::Ok).body_json(&rows)?)
 
         // let my_json = json!(rows);
 
         // Ok("Hello, World!")
     });
+
+    app.at("/users")
+        .get(|req: Request<ServerState>| async move {
+            let db_pool = &req.state().db_pool;
+
+            let rows = query_as!(User, "select id, username from users")
+                .fetch_all(db_pool)
+                .await
+                .unwrap();
+
+            let user_list_json = json!(rows);
+
+            // Ok(Response::new(StatusCode::Ok).set_body(Body::from_json(&user_list_json)?))
+            Ok(user_list_json)
+        });
 
     app
 }
@@ -59,6 +82,12 @@ async fn my_server() -> Server<ServerState> {
 #[derive(Debug, Clone)]
 struct ServerState {
     db_pool: PgPool,
+}
+
+#[derive(Debug, Serialize)]
+struct User {
+    id: Uuid,
+    username: String,
 }
 
 /*
@@ -72,4 +101,3 @@ enum CustomError {
     VarError(#[from] std::env::VarError),
 }
 */
-
